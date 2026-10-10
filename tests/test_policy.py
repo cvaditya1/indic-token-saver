@@ -5,7 +5,7 @@ import json
 import httpx
 
 from indic_token_saver.policy import should_translate
-from tests.test_week2 import FakeTranslator, _client, _completion
+from test_week2 import FakeTranslator, _client, _completion
 
 
 def test_default_translates_only_hi_and_te():

@@ -5,7 +5,7 @@ import json
 from fastapi.testclient import TestClient
 
 from indic_token_saver.stats import percentile_nearest_rank, summarize_log
-from tests.test_route import _settings
+from test_route import _settings
 
 
 def _row(**overrides) -> dict:

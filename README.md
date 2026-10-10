@@ -159,10 +159,35 @@ The app reads environment variables and, if present, a `.env` file in the workin
 ## Tests
 
 ```bash
-pytest
+PYTHONPATH=src pytest
 ```
 
 Tests are offline. They mock HTTP and inject a fake translator. They do not call Gemini or Groq, do not download weights, and do not load torch.
+
+CI runs the same command on GitHub Actions (Python 3.12, `requirements.txt` only).
+
+## Measure
+
+After clone, tag the release on your personal remote if you maintain a fork or mirror:
+
+```bash
+git push origin v0.2.0
+# e.g. git@github.com-personal:cvaditya1/indic-token-saver.git
+```
+
+To batch-measure `data/prompts_v0.jsonl` against a **local** proxy (keys only in `.env`, not in the script):
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+# start the server (see Run), then:
+python scripts/measure_prompts.py --limit 5
+python scripts/measure_prompts.py   # full set → results/measure_YYYYMMDD.jsonl
+```
+
+Options: `--base-url`, `--model` (default `gemini-3.5-flash-lite`), `--limit N`, `--no-write` (summary table only). Each row records response headers (`X-Detected-Language`, `X-Was-Translated`, `X-Estimated-Cost-Inr`), token usage, and latency. This does not run in CI and does not embed API keys.
+
+**LinkedIn / public write-up idea (no invented numbers):** ask the same practical question in English, Hindi, and Telugu (small N, e.g. the weather prompt or five prompts from the JSONL). Report passthrough prompt/completion tokens and whether translation changed the paid-side shape on your machine. Chart tokens by language; state Telugu baseline is incomplete until you finish one passthrough curl. Invite builders to try the bypass header and send feedback.
 
 ## Docker
 
