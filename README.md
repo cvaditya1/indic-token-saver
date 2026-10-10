@@ -282,6 +282,17 @@ On current `main`, the translate stage should be named **`translate-cpu`**, copy
 
 On **Apple Silicon**, Docker builds **linux/arm64**. Default PyPI `torch` for aarch64 is CUDA-bundled and useless inside Docker Desktop; `requirements-translate-cpu.txt` forces **`--index-url https://download.pytorch.org/whl/cpu`** so CPU wheels win.
 
+### Docker build fails building `IndicTransToolkit` (`gcc` not found)
+
+If the translate stage fails with **`Failed building wheel for IndicTransToolkit`** or **`[Errno 2] No such file or directory: 'gcc'`** while compiling `processor.c`, the image is missing a C compiler. `python:3.12-slim` does not include one.
+
+**Fix:** use a current `main` Dockerfile — the **`translate-cpu`** and **`translate-cuda`** stages install `gcc`, `g++`, `python3-dev`, and `build-essential` before `pip install`, then remove those packages after IndicTransToolkit builds.
+
+```bash
+git pull
+docker compose build app
+```
+
 ## Disclaimer
 
 This is a personal open-source project by Aditya Venkat Chalamchala. It is unaffiliated with any employer. Built with AI coding agents; design, review, and measurements by the author.

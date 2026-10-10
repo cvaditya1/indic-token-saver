@@ -30,7 +30,17 @@ FROM base AS slim
 FROM slim AS translate-cpu
 USER root
 COPY requirements-translate-cpu.txt requirements-translate-common.txt ./
-RUN pip install --no-cache-dir -r requirements-translate-cpu.txt
+# Common deps from PyPI; torch from CPU index (see requirements-translate-cpu.txt).
+# A single pip -r with --index-url on the CPU file makes pip resolve regex from PyTorch and breaks transformers.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc g++ python3-dev build-essential \
+    && pip install --no-cache-dir -r requirements-translate-common.txt \
+    && pip install --no-cache-dir torch \
+        --index-url https://download.pytorch.org/whl/cpu \
+        --extra-index-url https://pypi.org/simple \
+    && apt-get purge -y gcc g++ build-essential python3-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 USER appuser
 ENV HF_HOME=/home/appuser/.cache/huggingface
 
@@ -39,7 +49,12 @@ ENV HF_HOME=/home/appuser/.cache/huggingface
 FROM slim AS translate-cuda
 USER root
 COPY requirements-translate-cuda.txt requirements-translate-common.txt ./
-RUN pip install --no-cache-dir -r requirements-translate-cuda.txt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc g++ python3-dev build-essential \
+    && pip install --no-cache-dir -r requirements-translate-cuda.txt \
+    && apt-get purge -y gcc g++ build-essential python3-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 USER appuser
 ENV HF_HOME=/home/appuser/.cache/huggingface
 
