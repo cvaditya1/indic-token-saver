@@ -4,8 +4,7 @@ Version: **v0.2.0**
 Status: v0.2 keeps the week-2 IndicTrans2 path and makes the translate policy explicit. Default: translate only when the detected language is `hi` or `te`, unless `X-Bypass-Translation: 1`. `GET /stats` summarizes the existing JSONL log. This document is the spec. There is no `specs/` tree.
 
 Author: **Aditya Venkat Chalamchala**  
-This is a personal open-source project. It is unaffiliated with any employer.  
-Built with AI coding agents. Design, review, and measurements are by the author.
+This is a personal open-source project. It is unaffiliated with any employer.
 
 License: MIT.
 

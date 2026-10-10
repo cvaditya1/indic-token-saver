@@ -1,10 +1,27 @@
 # indic-token-saver
 
-OpenAI-compatible proxy for people who call Gemini or Groq with Hindi, Telugu, or English. Indic chat replies often use more tokens than the same meaning in English, and output tokens dominate published list prices. This proxy translates Hindi and Telugu locally with IndicTrans2 so the paid model sees English, translates the reply back, and logs language, latency, and a list-price estimate in rupees.
+**The problem:** If you chat with a cloud LLM in Hindi or Telugu, the model’s *reply* often burns many more tokens than the same answer in English—and providers price output tokens heavily. That shows up on usage dashboards even when the free tier bill is ₹0.
 
-Version **0.2.0**. Personal project by Aditya Venkat Chalamchala. Unaffiliated with any employer. Built with AI coding agents; design, review, and measurements by the author.
+**What this does:** A small OpenAI-compatible proxy sits in front of Gemini or Groq. For Hindi and Telugu it translates your message to English locally (IndicTrans2), sends English to the model, then translates the reply back. You keep your language; the paid call mostly sees English. It logs tokens, latency, and a list-price rupee estimate per request.
 
-Design: [SPEC.md](SPEC.md). Measurements: [RESULTS.md](RESULTS.md). License: MIT.
+Version **0.2.0**. Personal open-source project by Aditya Venkat Chalamchala. Unaffiliated with any employer.
+
+Design: [SPEC.md](SPEC.md). Full notes: [RESULTS.md](RESULTS.md). License: MIT.
+
+## Measured on one weather question (2026-10-10, `gemini-3.5-flash-lite`)
+
+Author-run, Hyderabad weather prompt in EN / HI / TE. **No savings claim**—replies differ between modes; **completion tokens** are what changed. Free tier bill ₹0; INR in logs is list-price estimate only. **n = 1**, not a production guarantee.
+
+| Mode | Lang | prompt | completion | ~latency |
+| --- | --- | ---: | ---: | ---: |
+| Translate-first (default) | EN | 9 | 27 | 1790 ms |
+| Translate-first | HI | 10 | 26 | 1008 ms |
+| Translate-first | TE | 10 | 26 | 6669 ms |
+| Passthrough (`X-Bypass-Translation: 1`) | EN | 9 | 26 | 1161 ms |
+| Passthrough | HI | 8 | 102 | 1225 ms |
+| Passthrough | TE | 13 | 91 | 1268 ms |
+
+On this prompt, passthrough Hindi/Telugu replies used **102** and **91** completion tokens vs **26** after translate-first. Prompt counts stayed similar. Details and caveats: [RESULTS.md](RESULTS.md).
 
 ## What it does
 
@@ -14,8 +31,6 @@ Design: [SPEC.md](SPEC.md). Measurements: [RESULTS.md](RESULTS.md). License: MIT
 4. `GET /stats` summarizes that log (count, p50 and p95 latency, token totals, estimated INR), split by whether translation ran and by detected language.
 
 The rupee figure is a published paid-tier **list-price estimate** of the call that was actually made (the English call when translation ran). It is not a charge. On the free tier the actual bill is ₹0.
-
-This repo does not claim token savings. The only measured language baseline is one short weather question on `gemini-3.5-flash-lite`, passthrough: English 9 prompt / 27 completion, Hindi 8 / 120. On that prompt, Hindi did not cost more input tokens than English. The reply side is where the Indic text grew. The Telugu sample is incomplete and is not given a token count. See [RESULTS.md](RESULTS.md).
 
 ## API
 
@@ -295,4 +310,4 @@ docker compose build app
 
 ## Disclaimer
 
-This is a personal open-source project by Aditya Venkat Chalamchala. It is unaffiliated with any employer. Built with AI coding agents; design, review, and measurements by the author.
+Personal open-source project by Aditya Venkat Chalamchala. Unaffiliated with any employer.
