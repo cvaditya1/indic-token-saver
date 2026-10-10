@@ -258,6 +258,30 @@ Options: `--base-url`, `--model` (default `gemini-3.5-flash-lite`), `--lang en|h
 
 **LinkedIn / public write-up idea (no invented numbers):** use `--compare-weather` (and optionally `--bypass`) for a small comparable trio before a larger `--lang` sweep. Chart tokens by language from your own runs; do not invent numbers.
 
+## Troubleshooting
+
+### Docker build downloads `cuda-toolkit`, `nvidia-cudnn`, or a huge `torch` wheel
+
+If `docker compose build app` (or `docker build .`) shows **`COPY requirements-translate.txt`** and pip resolves **`cuda-toolkit`** / **`nvidia-*`** packages (often a ~450MB+ `torch` wheel on **linux/arm64** / Apple Silicon), you are on an **old Dockerfile** or the **wrong build target** — not the current **translate-cpu** image.
+
+**Fix:** `git pull` on `main`, then rebuild with a clean layer cache if needed:
+
+```bash
+git pull
+docker compose build --no-cache app
+```
+
+On current `main`, the translate stage should be named **`translate-cpu`**, copy **`requirements-translate-cpu.txt`** (not `requirements-translate.txt`), and pip should use the **CPU wheel index** first.
+
+| What you want to see in the build log | What indicates an old/wrong build |
+| --- | --- |
+| `FROM slim AS translate-cpu` / target `translate-cpu` | stage named `[translate]` only |
+| `COPY requirements-translate-cpu.txt` | `COPY requirements-translate.txt` |
+| `Looking in indexes: https://download.pytorch.org/whl/cpu` (and PyPI as extra) | pip pulls `cuda-toolkit`, `nvidia-cudnn`, `nvidia-cublas`, … |
+| `torch` wheel ~tens of MB (CPU), no NVIDIA deps | single `torch` wheel ~400MB+ with CUDA extras |
+
+On **Apple Silicon**, Docker builds **linux/arm64**. Default PyPI `torch` for aarch64 is CUDA-bundled and useless inside Docker Desktop; `requirements-translate-cpu.txt` forces **`--index-url https://download.pytorch.org/whl/cpu`** so CPU wheels win.
+
 ## Disclaimer
 
 This is a personal open-source project by Aditya Venkat Chalamchala. It is unaffiliated with any employer. Built with AI coding agents; design, review, and measurements by the author.

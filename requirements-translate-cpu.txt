@@ -1,5 +1,7 @@
 # CPU-only PyTorch wheels (smaller/faster Docker build than CUDA).
 # Install with: pip install -r requirements-translate-cpu.txt
+# Primary index must be PyTorch CPU so aarch64 Docker builds do not pull CUDA-bundled torch from PyPI.
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
 -r requirements-translate-common.txt
---extra-index-url https://download.pytorch.org/whl/cpu
 torch

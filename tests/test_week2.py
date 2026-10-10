@@ -258,3 +258,7 @@ def test_slim_requirements_and_dockerfile_skip_torch():
     assert dockerfile.rstrip().endswith("FROM translate-cpu AS default")
     translate_cpu = (root / "requirements-translate-cpu.txt").read_text(encoding="utf-8")
     assert "torch" in translate_cpu
+    assert "https://download.pytorch.org/whl/cpu" in translate_cpu
+    assert "--index-url" in translate_cpu
+    assert "requirements-translate-cpu.txt" in dockerfile
+    assert "requirements-translate.txt" not in dockerfile
