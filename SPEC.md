@@ -375,12 +375,8 @@ Translate extra (not installed in the slim image): see `requirements-translate.t
 
 ### Container image
 
-The default image (`docker build .`, and `docker compose up`) installs from `requirements.txt` and copies `src/` only. It does not contain `.env` or API keys, and it does not install torch. Keys come from the environment at run time (`docker compose` `env_file`, or `docker run --env-file`). The image creates `logs/` and `data/` owned by the non-root user. Mount a volume on those directories if logs or the translation cache should outlive the container.
+On a personal machine, the recommended path is `docker compose up`, which builds the **translate** target (torch + IndicTrans2 deps). It mounts the host Hugging Face cache read-only at `/home/appuser/.cache/huggingface` so weights already on disk are reused; the first Hindi or Telugu request that is not bypassed loads models from that mount and can be slow. Compose also mounts `./logs` and `./data` for the JSONL log and SQLite translation cache. `.env` is not baked into the image; `env_file: .env` supplies API keys at run time.
 
-The translate image is a separate target. It installs `requirements-translate.txt` on top of the slim image. Build it explicitly:
+Gateway-only (no torch, Hindi and Telugu return HTTP 503): `docker compose --profile slim up --build app-slim`, or `docker build --target slim`.
 
-```bash
-docker build --target translate -t indic-token-saver:translate .
-```
-
-Compose keeps the default service on the slim target. A `translate` profile builds the heavy target and is not started by `docker compose up`.
+`docker build .` (no `--target`) builds the translate image. Neither image downloads model weights at build time.

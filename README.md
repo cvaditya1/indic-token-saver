@@ -86,7 +86,53 @@ Difference: this proxy is Indic-specific, uses a local translator, and is aimed 
 
 ## Run
 
-Python 3.11+. Two installs: a slim app with no torch, and a translate extra that adds IndicTrans2.
+### Docker (recommended)
+
+Full gateway with local Hindi/Telugu translation. Weights are not in the image; mount your existing Hugging Face cache.
+
+```bash
+cp .env.example .env
+# edit .env on the host; do not commit it
+docker compose up --build -d
+```
+
+Compose builds the **translate** target, maps port `8000`, loads `.env`, and mounts:
+
+- `~/.cache/huggingface` → `/home/appuser/.cache/huggingface` (read-only)
+- `./logs` and `./data` for the request log and translation cache
+
+The first `hi` or `te` request that is not bypassed loads IndicTrans2 from the cache mount; expect a long first response.
+
+Verify translation (needs `GEMINI_API_KEY` or `GROQ_API_KEY` in `.env`):
+
+```bash
+curl -s -D - -o /dev/null localhost:8000/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{"model":"gemini-3.5-flash-lite","messages":[{"role":"user","content":"आज हैदराबाद में मौसम कैसा है?"}]}' \
+  | grep -i x-was-translated
+```
+
+Expect `X-Was-Translated: 1` when the translate image and weights are available.
+
+Gateway-only image (CI-sized, no torch; `hi`/`te` → HTTP 503):
+
+```bash
+docker compose --profile slim up --build app-slim
+```
+
+Without Compose:
+
+```bash
+docker build -t indic-token-saver .
+docker run --rm --env-file .env -p 8000:8000 \
+  -v "${HOME}/.cache/huggingface:/home/appuser/.cache/huggingface:ro" \
+  -v "$(pwd)/logs:/app/logs" -v "$(pwd)/data:/app/data" \
+  indic-token-saver
+```
+
+### Local venv (development)
+
+Python 3.11+. Slim install has no torch; add the translate extra for IndicTrans2.
 
 Slim (passthrough, English, and the bypass header; Hindi and Telugu return HTTP 503):
 
@@ -175,45 +221,23 @@ git push origin v0.2.0
 # e.g. git@github.com-personal:cvaditya1/indic-token-saver.git
 ```
 
-To batch-measure `data/prompts_v0.jsonl` against a **local** proxy (keys only in `.env`, not in the script):
+Run the proxy with translation available (`docker compose up` or local venv + `requirements-translate.txt` and weights). Measuring against the **slim** image only exercises English rows unless you filter by language—and `hi`/`te` will 503.
 
 ```bash
-source .venv/bin/activate
-pip install -r requirements.txt
-# start the server (see Run), then:
-python scripts/measure_prompts.py --limit 5
-python scripts/measure_prompts.py   # full set → results/measure_YYYYMMDD.jsonl
+# comparable EN/HI/TE weather trio (3 live API calls)
+python scripts/measure_prompts.py --compare-weather --no-write
+
+# same trio, hi/te passthrough for baseline comparison
+python scripts/measure_prompts.py --compare-weather --bypass --no-write
+
+# batch JSONL (file order: en-* first, then hi-*, then te-*)
+python scripts/measure_prompts.py --lang hi --limit 5
+python scripts/measure_prompts.py --lang all   # full set → results/measure_YYYYMMDD.jsonl
 ```
 
-Options: `--base-url`, `--model` (default `gemini-3.5-flash-lite`), `--limit N`, `--no-write` (summary table only). Each row records response headers (`X-Detected-Language`, `X-Was-Translated`, `X-Estimated-Cost-Inr`), token usage, and latency. This does not run in CI and does not embed API keys.
+Options: `--base-url`, `--model` (default `gemini-3.5-flash-lite`), `--lang en|hi|te|all`, `--limit N`, `--bypass`, `--compare-weather`, `--no-write`. Each row records response headers (`X-Detected-Language`, `X-Was-Translated`, `X-Estimated-Cost-Inr`), token usage, and latency. This does not run in CI and does not embed API keys.
 
-**LinkedIn / public write-up idea (no invented numbers):** ask the same practical question in English, Hindi, and Telugu (small N, e.g. the weather prompt or five prompts from the JSONL). Report passthrough prompt/completion tokens and whether translation changed the paid-side shape on your machine. Chart tokens by language; state Telugu baseline is incomplete until you finish one passthrough curl. Invite builders to try the bypass header and send feedback.
-
-## Docker
-
-The default image installs `requirements.txt` only. It does not install torch, and it does not copy `.env` or model weights. Keys come from the environment at run time.
-
-```bash
-cp .env.example .env
-# edit .env on the host; do not commit it
-docker compose up --build
-```
-
-Without Compose:
-
-```bash
-docker build -t indic-token-saver .
-docker run --rm --env-file .env -p 8000:8000 indic-token-saver
-```
-
-The translate image is a separate target. It installs `requirements-translate.txt` on top of the slim image. It still does not bake weights or `.env` into the image. `docker compose up` does not start it.
-
-```bash
-docker build --target translate -t indic-token-saver:translate .
-# or: docker compose --profile translate up --build translate
-```
-
-The process listens on `0.0.0.0:8000`. Mount `logs/` and `data/` if those files should outlive the container.
+**LinkedIn / public write-up idea (no invented numbers):** use `--compare-weather` (and optionally `--bypass`) for a small comparable trio before a larger `--lang` sweep. Chart tokens by language from your own runs; do not invent numbers.
 
 ## Disclaimer
 

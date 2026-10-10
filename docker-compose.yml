@@ -1,18 +1,8 @@
+# Default `docker compose up` runs the full gateway (IndicTrans2 + torch).
+# Gateway-only (no hi/te translation): docker compose --profile slim up --build app-slim
+
 services:
   app:
-    build:
-      context: .
-      target: slim
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-
-  # Not started by `docker compose up` (that stays on the slim image).
-  # docker build --target translate -t indic-token-saver:translate .
-  # docker compose --profile translate up --build translate
-  translate:
-    profiles: ["translate"]
     build:
       context: .
       target: translate
@@ -20,3 +10,21 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    volumes:
+      # Reuse host weights; first hi/te request loads models from here (can be slow).
+      - ${HOME}/.cache/huggingface:/home/appuser/.cache/huggingface:ro
+      - ./logs:/app/logs
+      - ./data:/app/data
+
+  app-slim:
+    profiles: ["slim"]
+    build:
+      context: .
+      target: slim
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data

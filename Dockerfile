@@ -24,11 +24,14 @@ CMD ["uvicorn", "indic_token_saver.app:create_app", "--factory", "--host", "0.0.
 
 # Heavy image with IndicTrans2 dependencies. Not the default target.
 # docker build --target translate -t indic-token-saver:translate .
-FROM base AS translate
+FROM base AS slim
+
+FROM slim AS translate
 USER root
 COPY requirements-translate.txt .
 RUN pip install --no-cache-dir -r requirements-translate.txt
 USER appuser
+ENV HF_HOME=/home/appuser/.cache/huggingface
 
-# Last stage is the default `docker build .` image: no torch.
-FROM base AS slim
+# Last stage is the default `docker build .` image (includes torch / IndicTrans2).
+# Slim only: docker build --target slim .

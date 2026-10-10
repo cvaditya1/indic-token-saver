@@ -19,15 +19,41 @@ DEFAULT_BASE = "http://127.0.0.1:8000"
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_PROMPTS = Path(__file__).resolve().parent.parent / "data" / "prompts_v0.jsonl"
 
+# Same semantic weather question as en-01 / hi-01 / te-01 in prompts_v0.jsonl.
+WEATHER_TRIO: list[dict[str, Any]] = [
+    {
+        "id": "weather-en",
+        "lang": "en",
+        "text": "What is the weather in Hyderabad today?",
+    },
+    {
+        "id": "weather-hi",
+        "lang": "hi",
+        "text": "आज हैदराबाद में मौसम कैसा है?",
+    },
+    {
+        "id": "weather-te",
+        "lang": "te",
+        "text": "ఈరోజు హైదరాబాద్‌లో వాతావరణం ఎలా ఉంది?",
+    },
+]
 
-def _load_prompts(path: Path, limit: int | None) -> list[dict[str, Any]]:
+
+def _load_prompts(
+    path: Path,
+    limit: int | None,
+    lang: str,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with path.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line:
                 continue
-            rows.append(json.loads(line))
+            row = json.loads(line)
+            if lang != "all" and row.get("lang") != lang:
+                continue
+            rows.append(row)
             if limit is not None and len(rows) >= limit:
                 break
     return rows
@@ -38,15 +64,24 @@ def _measure_one(
     base_url: str,
     model: str,
     row: dict[str, Any],
+    *,
+    bypass: bool = False,
 ) -> dict[str, Any]:
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": row["text"]}],
     }
+    headers: dict[str, str] = {}
+    if bypass:
+        headers["X-Bypass-Translation"] = "1"
     started = time.perf_counter()
-    response = client.post(f"{base_url}/v1/chat/completions", json=payload)
+    response = client.post(
+        f"{base_url}/v1/chat/completions",
+        json=payload,
+        headers=headers,
+    )
     latency_ms = int((time.perf_counter() - started) * 1000)
-    headers = response.headers
+    resp_headers = response.headers
     body: dict[str, Any] = {}
     if response.content:
         try:
@@ -59,15 +94,16 @@ def _measure_one(
         "id": row.get("id"),
         "expected_lang": row.get("lang"),
         "http_status": response.status_code,
-        "detected_lang": headers.get("x-detected-language"),
-        "was_translated": headers.get("x-was-translated"),
-        "estimated_inr": headers.get("x-estimated-cost-inr"),
-        "translation_cache": headers.get("x-translation-cache"),
-        "request_id": headers.get("x-request-id"),
+        "detected_lang": resp_headers.get("x-detected-language"),
+        "was_translated": resp_headers.get("x-was-translated"),
+        "estimated_inr": resp_headers.get("x-estimated-cost-inr"),
+        "translation_cache": resp_headers.get("x-translation-cache"),
+        "request_id": resp_headers.get("x-request-id"),
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "total_tokens": usage.get("total_tokens"),
         "latency_ms": latency_ms,
+        "bypass": bypass,
         "error": body.get("error") if response.status_code >= 400 else None,
     }
 
@@ -100,6 +136,28 @@ def _print_summary(records: list[dict[str, Any]]) -> None:
         )
 
 
+def _print_weather_compare(records: list[dict[str, Any]], *, bypass: bool) -> None:
+    mode = "passthrough (X-Bypass-Translation: 1)" if bypass else "default policy"
+    print(f"\nWeather trio comparison ({mode}):")
+    print(
+        f"{'id':<12} {'lang':<4} {'HTTP':>4} {'trans':>5} "
+        f"{'prompt':>7} {'compl':>7} {'lat_ms':>8}"
+    )
+    for rec in records:
+        print(
+            f"{rec.get('id', '?'):<12} {rec.get('expected_lang', '?'):<4} "
+            f"{rec.get('http_status', 0):>4} "
+            f"{rec.get('was_translated') or '—':>5} "
+            f"{rec.get('prompt_tokens') or '—':>7} "
+            f"{rec.get('completion_tokens') or '—':>7} "
+            f"{rec.get('latency_ms', 0):>8}"
+        )
+    print(
+        "\nEnglish is always passthrough (translated=0). "
+        "Hindi and Telugu use translated=1 unless --bypass is set."
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -111,6 +169,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", default=DEFAULT_BASE, help="Proxy base URL")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model id for completions")
     parser.add_argument("--limit", type=int, default=None, help="Max prompts to run")
+    parser.add_argument(
+        "--lang",
+        choices=("en", "hi", "te", "all"),
+        default="all",
+        help="Filter prompts by lang field (default: all)",
+    )
+    parser.add_argument(
+        "--compare-weather",
+        action="store_true",
+        help="Run fixed EN/HI/TE weather questions (ignores --prompts, --limit, --lang)",
+    )
+    parser.add_argument(
+        "--bypass",
+        action="store_true",
+        help="Send X-Bypass-Translation: 1 (passthrough hi/te; en unchanged)",
+    )
     parser.add_argument(
         "--out",
         type=Path,
@@ -124,20 +198,29 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not args.prompts.is_file():
-        print(f"Prompt file not found: {args.prompts}", file=sys.stderr)
-        return 1
-
-    rows = _load_prompts(args.prompts, args.limit)
-    if not rows:
-        print("No prompts loaded.", file=sys.stderr)
-        return 1
+    if args.compare_weather:
+        rows = WEATHER_TRIO
+    else:
+        if not args.prompts.is_file():
+            print(f"Prompt file not found: {args.prompts}", file=sys.stderr)
+            return 1
+        rows = _load_prompts(args.prompts, args.limit, args.lang)
+        if not rows:
+            print(
+                f"No prompts loaded (lang={args.lang}"
+                + (f", limit={args.limit}" if args.limit else "")
+                + ").",
+                file=sys.stderr,
+            )
+            return 1
 
     out_path = args.out
-    if out_path is None and not args.no_write:
+    if out_path is None and not args.no_write and not args.compare_weather:
         out_dir = Path(__file__).resolve().parent.parent / "results"
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"measure_{date.today():%Y%m%d}.jsonl"
+    if args.compare_weather and args.out is not None:
+        out_path = args.out
 
     records: list[dict[str, Any]] = []
     timeout = httpx.Timeout(120.0, connect=10.0)
@@ -146,12 +229,18 @@ def main(argv: list[str] | None = None) -> int:
         if health.status_code != 200:
             print(
                 f"Proxy not healthy at {args.base_url} (HTTP {health.status_code}). "
-                "Start uvicorn locally with API keys in .env.",
+                "Start the proxy (Docker or uvicorn) with API keys in .env.",
                 file=sys.stderr,
             )
             return 1
         for row in rows:
-            rec = _measure_one(client, args.base_url.rstrip("/"), args.model, row)
+            rec = _measure_one(
+                client,
+                args.base_url.rstrip("/"),
+                args.model,
+                row,
+                bypass=args.bypass,
+            )
             records.append(rec)
             print(
                 f"{rec['id']}: HTTP {rec['http_status']} "
@@ -168,7 +257,10 @@ def main(argv: list[str] | None = None) -> int:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(f"\nWrote {len(records)} rows to {out_path}")
 
-    _print_summary(records)
+    if args.compare_weather:
+        _print_weather_compare(records, bypass=args.bypass)
+    else:
+        _print_summary(records)
     failed = sum(1 for r in records if r.get("http_status") != 200)
     return 1 if failed else 0
 
