@@ -1,0 +1,13 @@
+# Local IndicTrans2 extra. The slim image does not install this file.
+# Official stack: torch, transformers, and IndicTransToolkit.
+# Install with: pip install -r requirements-translate.txt
+# Then place the distilled checkpoints on disk (this repo does not download them):
+#   ai4bharat/indictrans2-indic-en-dist-200M
+#   ai4bharat/indictrans2-en-indic-dist-200M
+
+torch
+# IndicTransToolkit 1.1 imports PreTrainedTokenizerBase from transformers.tokenization_utils.
+# That path is gone in transformers 5, so stay on the 4.x line the toolkit documents (>=4.51).
+transformers>=4.51,<5
+sentencepiece
+IndicTransToolkit
