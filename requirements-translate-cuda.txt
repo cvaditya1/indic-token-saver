@@ -1,0 +1,5 @@
+# NVIDIA CUDA PyTorch wheels (cu124). Use on Linux hosts with the GPU Compose profile.
+# Install with: pip install -r requirements-translate-cuda.txt
+-r requirements-translate-common.txt
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch

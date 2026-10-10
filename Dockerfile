@@ -22,16 +22,26 @@ EXPOSE 8000
 
 CMD ["uvicorn", "indic_token_saver.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 
-# Heavy image with IndicTrans2 dependencies. Not the default target.
-# docker build --target translate -t indic-token-saver:translate .
+# Gateway only (no torch). docker build --target slim .
 FROM base AS slim
 
-FROM slim AS translate
+# CPU torch wheels — default full gateway image (no CUDA download).
+# docker build --target translate-cpu -t indic-token-saver:translate-cpu .
+FROM slim AS translate-cpu
 USER root
-COPY requirements-translate.txt .
-RUN pip install --no-cache-dir -r requirements-translate.txt
+COPY requirements-translate-cpu.txt requirements-translate-common.txt ./
+RUN pip install --no-cache-dir -r requirements-translate-cpu.txt
 USER appuser
 ENV HF_HOME=/home/appuser/.cache/huggingface
 
-# Last stage is the default `docker build .` image (includes torch / IndicTrans2).
-# Slim only: docker build --target slim .
+# NVIDIA CUDA torch (opt-in; large layer). Linux + NVIDIA only.
+# docker build --target translate-cuda -t indic-token-saver:translate-cuda .
+FROM slim AS translate-cuda
+USER root
+COPY requirements-translate-cuda.txt requirements-translate-common.txt ./
+RUN pip install --no-cache-dir -r requirements-translate-cuda.txt
+USER appuser
+ENV HF_HOME=/home/appuser/.cache/huggingface
+
+# Default `docker build .` is CPU translate (not CUDA).
+FROM translate-cpu AS default

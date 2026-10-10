@@ -253,6 +253,8 @@ def test_slim_requirements_and_dockerfile_skip_torch():
     assert "torch" not in requirements
     dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY .env" not in dockerfile
-    assert dockerfile.rstrip().endswith("FROM base AS slim")
-    translate_req = (root / "requirements-translate.txt").read_text(encoding="utf-8")
-    assert "torch" in translate_req
+    assert "translate-cpu" in dockerfile
+    assert "translate-cuda" in dockerfile
+    assert dockerfile.rstrip().endswith("FROM translate-cpu AS default")
+    translate_cpu = (root / "requirements-translate-cpu.txt").read_text(encoding="utf-8")
+    assert "torch" in translate_cpu

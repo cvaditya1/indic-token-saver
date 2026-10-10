@@ -252,7 +252,7 @@ Runtime: `IndicTransToolkit` `IndicProcessor(inference=True)`, then the Hugging 
 
 Weights load lazily, `local_files_only`, on first use. This project does not download weights at startup. If the translate extra is not installed, or the weights are not on disk, the request returns HTTP 503. The message names both model ids and `requirements-translate.txt`.
 
-Heavy dependencies live in `requirements-translate.txt` (torch, transformers, IndicTransToolkit or the official supported stack). `requirements.txt` stays free of torch so the week-1 slim image still builds.
+Heavy dependencies live in `requirements-translate-cpu.txt` / `requirements-translate-cuda.txt` (torch variant + shared `requirements-translate-common.txt`). `requirements-translate.txt` includes the CPU file for local venv installs. `requirements.txt` stays free of torch so the slim image still builds.
 
 ### Translation cache
 
@@ -375,8 +375,20 @@ Translate extra (not installed in the slim image): see `requirements-translate.t
 
 ### Container image
 
-On a personal machine, the recommended path is `docker compose up`, which builds the **translate** target (torch + IndicTrans2 deps). It mounts the host Hugging Face cache read-only at `/home/appuser/.cache/huggingface` so weights already on disk are reused; the first Hindi or Telugu request that is not bypassed loads models from that mount and can be slow. Compose also mounts `./logs` and `./data` for the JSONL log and SQLite translation cache. `.env` is not baked into the image; `env_file: .env` supplies API keys at run time.
+Dockerfile targets:
+
+| Target | Contents |
+| --- | --- |
+| `slim` | Gateway only; `requirements.txt`; no torch |
+| `translate-cpu` | slim + CPU PyTorch wheels + IndicTrans2 deps (`requirements-translate-cpu.txt`) |
+| `translate-cuda` | slim + CUDA PyTorch wheels (`requirements-translate-cuda.txt`, cu124 index) |
+
+On a personal machine, the recommended path is `docker compose up`, which builds **translate-cpu** (default). It mounts the host Hugging Face cache read-only at `/home/appuser/.cache/huggingface` so weights already on disk are reused; the first Hindi or Telugu request that is not bypassed loads models from that mount and can be slow. Compose also mounts `./logs` and `./data` for the JSONL log and SQLite translation cache. `.env` is not baked into the image; `env_file: .env` supplies API keys at run time.
+
+NVIDIA GPU hosts: `docker compose --profile gpu up --build app-gpu` (target `translate-cuda`, `gpus: all` / compose device reservation). Mac hosts use CPU in Docker; native venv may set `TRANSLATE_DEVICE=mps`. AMD GPU users: host venv or CPU container (no ROCm image in v0.2).
 
 Gateway-only (no torch, Hindi and Telugu return HTTP 503): `docker compose --profile slim up --build app-slim`, or `docker build --target slim`.
 
-`docker build .` (no `--target`) builds the translate image. Neither image downloads model weights at build time.
+`docker build .` (no `--target`) builds **translate-cpu**. Neither image downloads model weights at build time.
+
+Runtime device for IndicTrans2: optional `TRANSLATE_DEVICE` (`cpu` \| `cuda` \| `mps`); if unset, use CUDA when available, else CPU. Logged once at first model load (INFO).

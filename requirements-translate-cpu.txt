@@ -1,0 +1,5 @@
+# CPU-only PyTorch wheels (smaller/faster Docker build than CUDA).
+# Install with: pip install -r requirements-translate-cpu.txt
+-r requirements-translate-common.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch

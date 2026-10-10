@@ -96,12 +96,30 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-Compose builds the **translate** target, maps port `8000`, loads `.env`, and mounts:
+Compose builds the **translate-cpu** target (PyTorch CPU wheels only — no multi‑gigabyte CUDA download). Maps port `8000`, loads `.env`, and mounts:
 
 - `~/.cache/huggingface` → `/home/appuser/.cache/huggingface` (read-only)
 - `./logs` and `./data` for the request log and translation cache
 
-The first `hi` or `te` request that is not bypassed loads IndicTrans2 from the cache mount; expect a long first response.
+The first image build is still slow while the torch layer installs. The CUDA image is opt-in (see below). The first `hi` or `te` request that is not bypassed loads IndicTrans2 from the cache mount; expect a long first response.
+
+| Image target | Compose service | When to use |
+| --- | --- | --- |
+| `slim` | `app-slim` (`--profile slim`) | CI-sized gateway; no torch; `hi`/`te` → HTTP 503 |
+| `translate-cpu` | `app` (default) | Mac (including M4), Linux without GPU, or any host where Docker has no NVIDIA GPU |
+| `translate-cuda` | `app-gpu` (`--profile gpu`) | Linux with NVIDIA GPU and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) |
+
+On **Mac (e.g. M4)**, use the default CPU container — Docker Desktop does not expose Apple GPU or MPS inside Linux containers. For Metal/MPS inference, run the translate extra in a **native venv** and set `TRANSLATE_DEVICE=mps`.
+
+On **Linux + NVIDIA**, use GPU Compose:
+
+```bash
+docker compose --profile gpu up --build app-gpu
+```
+
+**AMD GPU:** ROCm in Docker is not supported here. Run translation on the host venv or use the default CPU container.
+
+Optional env: `TRANSLATE_DEVICE=cpu|cuda|mps` (default in container: CUDA if visible, else CPU; MPS only when set explicitly, typically on macOS venv).
 
 Verify translation (needs `GEMINI_API_KEY` or `GROQ_API_KEY` in `.env`):
 
@@ -123,7 +141,8 @@ docker compose --profile slim up --build app-slim
 Without Compose:
 
 ```bash
-docker build -t indic-token-saver .
+docker build -t indic-token-saver .   # same as --target translate-cpu
+docker build --target translate-cuda -t indic-token-saver:cuda .
 docker run --rm --env-file .env -p 8000:8000 \
   -v "${HOME}/.cache/huggingface:/home/appuser/.cache/huggingface:ro" \
   -v "$(pwd)/logs:/app/logs" -v "$(pwd)/data:/app/data" \

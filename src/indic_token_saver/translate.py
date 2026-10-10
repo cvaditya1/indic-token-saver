@@ -5,8 +5,14 @@ Tests inject a fake translator. This module does not download weights.
 
 from __future__ import annotations
 
+import logging
+import os
 import threading
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
+
+_device_logged = False
 
 INDIC_EN_MODEL = "ai4bharat/indictrans2-indic-en-dist-200M"
 EN_INDIC_MODEL = "ai4bharat/indictrans2-en-indic-dist-200M"
@@ -110,6 +116,28 @@ class IndicTrans2Translator:
             return loaded
 
 
+def _resolve_device(torch: object) -> tuple[str, object]:
+    """Pick inference device: TRANSLATE_DEVICE, else CUDA if available, else CPU."""
+    global _device_logged
+    raw = os.environ.get("TRANSLATE_DEVICE", "").strip().lower()
+    if raw:
+        if raw not in {"cpu", "cuda", "mps"}:
+            raise ValueError(
+                f"invalid TRANSLATE_DEVICE={raw!r}; use cpu, cuda, or mps"
+            )
+        device = raw
+    elif torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+    dtype = torch.float16 if device == "cuda" else torch.float32
+    if not _device_logged:
+        logger.info("IndicTrans2 inference device: %s", device)
+        _device_logged = True
+    return device, dtype
+
+
 def _load_model(model_id: str) -> tuple[object, object, object, str]:
     try:
         import torch
@@ -124,15 +152,7 @@ def _load_model(model_id: str) -> tuple[object, object, object, str]:
         except ImportError as exc:
             raise TranslationUnavailable(unavailable_message()) from exc
 
-    if torch.cuda.is_available():
-        device = "cuda"
-        dtype = torch.float16
-    elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-        device = "mps"
-        dtype = torch.float32
-    else:
-        device = "cpu"
-        dtype = torch.float32
+    device, dtype = _resolve_device(torch)
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(

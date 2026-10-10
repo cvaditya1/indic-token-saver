@@ -1,17 +1,40 @@
-# Default `docker compose up` runs the full gateway (IndicTrans2 + torch).
+# Default `docker compose up` runs the CPU translate gateway (torch CPU wheels only).
+# NVIDIA GPU: docker compose --profile gpu up --build app-gpu
 # Gateway-only (no hi/te translation): docker compose --profile slim up --build app-slim
 
 services:
   app:
     build:
       context: .
-      target: translate
+      target: translate-cpu
     ports:
       - "8000:8000"
     env_file:
       - .env
     volumes:
       # Reuse host weights; first hi/te request loads models from here (can be slow).
+      - ${HOME}/.cache/huggingface:/home/appuser/.cache/huggingface:ro
+      - ./logs:/app/logs
+      - ./data:/app/data
+
+  app-gpu:
+    profiles: ["gpu"]
+    build:
+      context: .
+      target: translate-cuda
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    gpus: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
       - ${HOME}/.cache/huggingface:/home/appuser/.cache/huggingface:ro
       - ./logs:/app/logs
       - ./data:/app/data

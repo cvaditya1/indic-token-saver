@@ -1,0 +1,4 @@
+# Shared IndicTrans2 deps (no torch). Included by CPU and CUDA requirement files.
+transformers>=4.51,<5
+sentencepiece
+IndicTransToolkit
